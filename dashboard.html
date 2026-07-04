@@ -58,14 +58,14 @@ body {
 .judgment {
     display: flex;
     align-items: center;
-    gap: 18px;
+    gap: 14px;
     flex-wrap: wrap;
 }
 .j-chip {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 6px 14px;
+    padding: 6px 12px;
     background: var(--bg-card2);
     border: 1px solid var(--border);
     border-radius: 20px;
@@ -83,6 +83,7 @@ body {
 .j-chip[data-level="freeze"] .dot { background: var(--purple); }
 .j-chip .label { color: var(--muted); font-size: 11px; }
 .j-chip .value { font-weight: 600; }
+.j-chip .big { color: var(--accent); font-weight: 700; font-size: 16px; }
 
 /* ========== 主网格 ========== */
 .grid {
@@ -135,10 +136,58 @@ body {
     padding: 8px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
 }
-.chart { width: 100%; flex: 1; min-height: 150px; }
-.chart-half { width: 100%; flex: 1; min-height: 130px; }
+.chart { width: 100%; height: 100%; min-height: 320px; }
+.chart-big { width: 100%; flex: 1; min-height: 280px; }
+
+/* ========== 情绪线面值卡(可以比普通 chart 高一点) ========== */
+.sentiment-stat {
+    display: flex;
+    gap: 18px;
+    padding: 14px 22px;
+    margin-top: 12px;
+    background: var(--bg-card2);
+    border-radius: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+.sentiment-stat .big-num {
+    font-size: 36px;
+    font-weight: 700;
+    color: var(--accent);
+    line-height: 1;
+}
+.sentiment-stat .zone-tag {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 600;
+    background: var(--accent);
+    color: white;
+}
+.sentiment-stat .delta {
+    font-size: 13px;
+    color: var(--muted);
+}
+.sentiment-stat .delta .up { color: var(--red); }
+.sentiment-stat .delta .down { color: var(--green); }
+.sentiment-stat .components {
+    display: flex;
+    gap: 10px;
+    margin-left: auto;
+    flex-wrap: wrap;
+}
+.sentiment-stat .comp {
+    text-align: center;
+    background: var(--bg-card);
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    min-width: 70px;
+}
+.sentiment-stat .comp .lbl { font-size: 10px; color: var(--muted); }
+.sentiment-stat .comp .val { font-size: 16px; font-weight: 600; }
 
 /* ========== 信号面板 ========== */
 .signals {
@@ -266,15 +315,15 @@ body {
 
     <!-- ========== 主网格 4 面板 ========== -->
     <div class="grid">
-        <!-- 情绪周期 -->
+        <!-- 综合情绪指标(单一曲线) -->
         <div class="card">
             <div class="card-head">
-                <div class="card-title">市场情绪周期 <span class="badge">QUAD</span></div>
-                <div class="card-meta">VIX · PCR · 两融 · CNN 恐惧贪婪</div>
+                <div class="card-title">综合情绪指标 <span class="badge">合成</span></div>
+                <div class="card-meta">VIX×25% + PCR×25% + 两融×25% + CNN×25%</div>
             </div>
             <div class="card-body">
-                <div id="chart-sentiment-1" class="chart-half"></div>
-                <div id="chart-sentiment-2" class="chart-half"></div>
+                <div id="chart-sentiment" class="chart-big"></div>
+                <div class="sentiment-stat" id="sentiment-stat"></div>
             </div>
         </div>
 
@@ -285,8 +334,8 @@ body {
                 <div class="card-meta">TOP 50 成交占比 · 5日均线 · 总成交额</div>
             </div>
             <div class="card-body">
-                <div id="chart-baotuan-1" class="chart-half"></div>
-                <div id="chart-baotuan-2" class="chart-half"></div>
+                <div id="chart-baotuan-1" style="width:100%;height:46%;min-height:140px;"></div>
+                <div id="chart-baotuan-2" style="width:100%;height:46%;min-height:140px;margin-top:6px;"></div>
             </div>
         </div>
 
@@ -338,9 +387,6 @@ const TOOLTIP_BASE = {
     textStyle: { color: '#e5eaf2', fontSize: 12 },
     axisPointer: { type: 'cross', lineStyle: { color: '#8c95a8', type: 'dashed' } },
 };
-function gridOpt() {
-    return { left: 50, right: 60, top: 50, bottom: 60 };
-}
 function axisCommon(name) {
     return {
         type: 'value',
@@ -361,6 +407,8 @@ function timeAxis() {
 }
 const COLORS = ['#2a82e5', '#2dd4a0', '#f59e0b', '#ef4444', '#a78bfa', '#fbbf24', '#06b6d4', '#ec4899'];
 function getColor(i) { return COLORS[i % COLORS.length]; }
+
+// 简单折线图 series
 function buildSeries(defList, dates) {
     return defList.map((s, i) => ({
         name: s.name,
@@ -396,7 +444,7 @@ function buildChartOption(dates, seriesDef, opts) {
             },
         }, TOOLTIP_BASE),
         legend: { data: legendData, textStyle: BASE_TEXT_STYLE, top: 8, left: 10 },
-        grid: gridOpt(),
+        grid: { left: 50, right: 60, top: 50, bottom: 60 },
         xAxis: timeAxis(),
         yAxis: opts.yAxis || axisCommon(),
         dataZoom: [
@@ -410,14 +458,115 @@ function buildChartOption(dates, seriesDef, opts) {
     };
 }
 
-function buildMultiYAxisOption(dates, seriesGroups) {
-    // seriesGroups: [{name, data, color, yAxisName, position}]
-    const series = [];
-    const yAxes = [];
-    let leftCount = 0, rightCount = 0;
+// 合成情绪指标专用图(背景颜色带 + 主线 + 4 折线)
+function buildCompositeChartOption(dates, compositeData, componentLines, zones, rawData) {
+    // 1. 背景颜色区
+    const markArea = zones.map(z => [{
+        yAxis: z.min,
+        itemStyle: { color: z.color, opacity: 0.10 },
+    }, {
+        yAxis: z.max,
+    }]);
 
+    // 2. 主线(综合)
+    const mainLine = {
+        name: '综合情绪',
+        type: 'line',
+        data: dates.map((d, j) => [d, compositeData[j]]),
+        smooth: true,
+        symbol: 'circle',
+        showSymbol: false,
+        lineStyle: { color: '#fbbf24', width: 2.6 },
+        itemStyle: { color: '#fbbf24' },
+        z: 10,
+        markArea: {
+            silent: true,
+            data: markArea,
+        },
+        areaStyle: {
+            color: {
+                type: 'linear',
+                x: 0, y: 0, x2: 0, y2: 1,
+                colorStops: [
+                    { offset: 0, color: 'rgba(251, 191, 36, 0.3)' },
+                    { offset: 1, color: 'rgba(251, 191, 36, 0.0)' },
+                ],
+            },
+        },
+    };
+
+    // 3. 4 个成分(细线)
+    const compSeries = ['vix_norm', 'pcr_norm', 'margin_norm', 'cnn_norm'].map((key, i) => ({
+        name: COMPONENT_LABELS[key],
+        type: 'line',
+        data: dates.map((d, j) => [d, componentLines[key][j]]),
+        symbol: 'none',
+        showSymbol: false,
+        lineStyle: { color: COMPONENT_COLORS[key], width: 1.0, opacity: 0.5, type: 'solid' },
+        itemStyle: { color: COMPONENT_COLORS[key] },
+        emphasis: { focus: 'series' },
+    }));
+
+    return {
+        backgroundColor: 'transparent',
+        tooltip: Object.assign({
+            trigger: 'axis',
+            formatter: function(params) {
+                const date = new Date(params[0].value[0]).toLocaleDateString('zh-CN', {year:'numeric', month:'2-digit', day:'2-digit'}).replace(/\//g, '-');
+                let html = `<div style="font-weight:600;margin-bottom:6px">${date}</div>`;
+                const i = params[0].dataIndex;
+                const compValue = compositeData[i];
+                if (compValue != null) {
+                    const zone = zones.find(z => compValue >= z.min && compValue < z.max) || zones[zones.length - 1];
+                    html += `<div style="margin:6px 0;padding:4px 8px;background:${zone.color};color:#fff;border-radius:4px;font-weight:600">合成值: ${compValue.toFixed(1)} · ${zone.label}</div>`;
+                }
+                // 4 成分
+                params.forEach(p => {
+                    const v = p.value[1];
+                    const formatted = (v === null || v === undefined) ? '—' :
+                        (typeof v === 'number' ? v.toFixed(1) : v);
+                    html += `<div><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:50%;margin-right:6px"></span>${p.seriesName}: <b>${formatted}</b></div>`;
+                });
+                // 原始数据
+                if (rawData) {
+                    html += '<div style="margin-top:6px;padding-top:6px;border-top:1px solid #444">';
+                    html += '<div style="color:#8c95a8;font-size:11px;margin-bottom:4px">原始指标</div>';
+                    const i = params[0].dataIndex;
+                    if (rawData.VIX && rawData.VIX[i] != null) html += `<div style="font-size:11px">VIX: <b>${rawData.VIX[i].toFixed(2)}</b></div>`;
+                    if (rawData.PCR && rawData.PCR[i] != null) html += `<div style="font-size:11px">PCR: <b>${rawData.PCR[i].toFixed(2)}</b></div>`;
+                    if (rawData.CNN_FG && rawData.CNN_FG[i] != null) html += `<div style="font-size:11px">CNN_F&G: <b>${rawData.CNN_FG[i].toFixed(1)}</b></div>`;
+                    if (rawData['两融余额'] && rawData['两融余额'][i] != null) html += `<div style="font-size:11px">两融余额: <b>${rawData['两融余额'][i].toFixed(0)} 亿</b></div>`;
+                    html += '</div>';
+                }
+                return html;
+            },
+        }, TOOLTIP_BASE),
+        legend: {
+            data: ['综合情绪', 'VIX', 'PCR', '两融余额', 'CNN_F&G'],
+            textStyle: BASE_TEXT_STYLE, top: 8, left: 10,
+        },
+        grid: { left: 50, right: 60, top: 50, bottom: 60 },
+        xAxis: timeAxis(),
+        yAxis: {
+            ...axisCommon(),
+            min: 0,
+            max: 100,
+            interval: 20,
+            name: '情绪值 0-100',
+        },
+        dataZoom: [
+            { type: 'inside', start: 60, end: 100 },
+            { type: 'slider', start: 60, end: 100, height: 22, bottom: 8,
+              textStyle: { color: '#8c95a8' },
+              fillerColor: 'rgba(42, 130, 229, 0.2)', borderColor: '#2a3447' },
+        ],
+        series: [mainLine, ...compSeries],
+    };
+}
+
+function buildMultiYAxisOption(dates, seriesGroups) {
+    const series = [];
     seriesGroups.forEach((g, i) => {
-        const position = g.position || (i % 2 === 0 ? 'left' : 'right');
         const color = g.color || getColor(i);
         series.push({
             name: g.name, type: 'line',
@@ -426,24 +575,20 @@ function buildMultiYAxisOption(dates, seriesGroups) {
             smooth: false,
             lineStyle: { color, width: 1.6 },
             itemStyle: { color },
-            yAxisIndex: position === 'left' ? 0 : 1,
+            yAxisIndex: g.position === 'right' ? 1 : 0,
             emphasis: { focus: 'series', lineStyle: { width: 2.4 } },
         });
-        if (position === 'left') leftCount++; else rightCount++;
     });
-
-    yAxes.push(Object.assign(axisCommon(), { position: 'left' }));
-    yAxes.push(Object.assign(axisCommon(), { position: 'right' }));
-
     return {
         backgroundColor: 'transparent',
-        tooltip: Object.assign({
-            trigger: 'axis', confine: true,
-        }, TOOLTIP_BASE),
+        tooltip: Object.assign({ trigger: 'axis', confine: true }, TOOLTIP_BASE),
         legend: { data: seriesGroups.map(g => g.name), textStyle: BASE_TEXT_STYLE, top: 8 },
         grid: { left: 60, right: 80, top: 50, bottom: 60 },
         xAxis: timeAxis(),
-        yAxis: yAxes,
+        yAxis: [
+            Object.assign(axisCommon(), { position: 'left' }),
+            Object.assign(axisCommon(), { position: 'right' }),
+        ],
         dataZoom: [
             { type: 'inside', start: 60, end: 100 },
             { type: 'slider', start: 60, end: 100, height: 22, bottom: 8,
@@ -456,6 +601,19 @@ function buildMultiYAxisOption(dates, seriesGroups) {
 
 // ===================== 主流程 =====================
 const charts = {};
+
+const COMPONENT_LABELS = {
+    vix_norm:    'VIX',
+    pcr_norm:    'PCR',
+    margin_norm: '两融余额',
+    cnn_norm:    'CNN_F&G',
+};
+const COMPONENT_COLORS = {
+    vix_norm:    '#2a82e5',
+    pcr_norm:    '#2dd4a0',
+    margin_norm: '#f59e0b',
+    cnn_norm:    '#ef4444',
+};
 
 function renderJudgment(d) {
     const phaseMap = {
@@ -489,39 +647,89 @@ function renderJudgment(d) {
     document.getElementById('advice').textContent = '📐 策略: ' + (d.advice || '');
 }
 
+function renderSentimentStat(data) {
+    const composite = data.composite || [];
+    const comps = data.components || {};
+    const raw   = data.raw || {};
+    const zones = data.zones || [];
+    if (!composite.length) return;
+
+    // 最新非空值
+    let lastIdx = composite.length - 1;
+    while (lastIdx >= 0 && composite[lastIdx] == null) lastIdx--;
+    if (lastIdx < 0) return;
+
+    const lastVal = composite[lastIdx];
+    // 上一非空
+    let prevIdx = lastIdx - 1;
+    while (prevIdx >= 0 && composite[prevIdx] == null) prevIdx--;
+    const prevVal = prevIdx >= 0 ? composite[prevIdx] : lastVal;
+    const delta = lastVal - prevVal;
+
+    const zone = zones.find(z => lastVal >= z.min && lastVal < z.max) || zones[zones.length - 1];
+
+    const html = `
+        <div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:4px">当前综合情绪</div>
+            <div style="display:flex;align-items:baseline;gap:8px">
+                <span class="big-num" style="color:${zone.color}">${lastVal.toFixed(1)}</span>
+                <span class="zone-tag" style="background:${zone.color}">${zone.label}</span>
+                <span class="delta">较前: <b class="${delta>0?'up':'down'}">${delta>0?'+':''}${delta.toFixed(1)}</b></span>
+            </div>
+        </div>
+        <div class="components">
+            ${['vix_norm', 'pcr_norm', 'margin_norm', 'cnn_norm'].map(k => {
+                const v = comps[k] ? comps[k][lastIdx] : null;
+                return `<div class="comp">
+                    <div class="lbl">${COMPONENT_LABELS[k]}<br><span style="color:var(--muted);font-size:9px">25%</span></div>
+                    <div class="val" style="color:${COMPONENT_COLORS[k]}">${v != null ? v.toFixed(1) : '—'}</div>
+                </div>`;
+            }).join('')}
+        </div>
+    `;
+    document.getElementById('sentiment-stat').innerHTML = html;
+}
+
+// 容错 fetch:依次尝试多个路径
 async function fetchData() {
-    try {
-        const r = await fetch('data/data.json?t=' + Date.now());
-        if (!r.ok) throw new Error('fetch fail ' + r.status);
-        return await r.json();
-    } catch (e) {
-        console.error('data fetch error', e);
-        return null;
+    const paths = [
+        'data/data.json',
+        './data/data.json',
+        'data.json',
+        './data.json',
+    ];
+    for (const p of paths) {
+        try {
+            const r = await fetch(p + '?t=' + Date.now(), { cache: 'no-cache' });
+            if (r.ok) {
+                const text = await r.text();
+                try { return JSON.parse(text); }
+                catch { continue; }
+            }
+        } catch (e) {}
     }
+    console.error('data.json not found in any path');
+    return null;
 }
 
 async function loadAndRender() {
     const data = await fetchData();
     if (!data) {
-        setTimeout(loadAndRender, 10000);
+        setTimeout(loadAndRender, 5000);
         return;
     }
     document.getElementById('last-fetch').textContent = new Date().toLocaleString('zh-CN');
 
-    // 1. 情绪周期 - 上下分图:VIX+PCR / CNN F&G+两融
+    // 1. 综合情绪(单一主线 + 4 成分 + 原始数据 tooltip)
     if (data.sentiment) {
-        const dates = data.sentiment.dates;
-        const sentSeries = data.sentiment.series;
-        charts.sentiment_1.setOption(buildChartOption(
-            dates,
-            [sentSeries[0], sentSeries[1]], // VIX, PCR
-            {start: 60, yAxis: { ...axisCommon(), min: 0, max: 50 }}
+        charts.sentiment.setOption(buildCompositeChartOption(
+            data.sentiment.dates,
+            data.sentiment.composite || [],
+            data.sentiment.components || {},
+            data.sentiment.zones || [],
+            data.sentiment.raw,
         ));
-        charts.sentiment_2.setOption(buildChartOption(
-            dates,
-            [sentSeries[2], sentSeries[3]], // CNN F&G, 两融
-            {start: 60, yAxis: { ...axisCommon(), min: 0 }}
-        ));
+        renderSentimentStat(data.sentiment);
     }
 
     // 2. 抱团率 - 上:抱团率+5日均线 / 下:总成交额+参与股票数
@@ -530,13 +738,13 @@ async function loadAndRender() {
         const series = data.baotuan.series;
         charts.baotuan_1.setOption(buildChartOption(
             dates,
-            [series[0], series[1]], // 抱团率, 5日均线
-            {start: 60, yAxis: { ...axisCommon(), min: 0, max: 100 }}
+            [series[0], series[1]],
+            { start: 60, yAxis: { ...axisCommon(), min: 0, max: 100 } }
         ));
         charts.baotuan_2.setOption(buildChartOption(
             dates,
-            [series[2], series[3]], // 总成交额, 股票数
-            {start: 60, yAxis: axisCommon()}
+            [series[2], series[3]],
+            { start: 60, yAxis: axisCommon() }
         ));
     }
 
@@ -544,17 +752,16 @@ async function loadAndRender() {
     if (data.longterm && charts.longterm) {
         const groups = data.longterm.series.map((s, i) => ({
             name: s.name, data: s.data,
-            color: getColor(i),
-            position: 'left',
+            color: getColor(i), position: 'left',
         }));
         charts.longterm.setOption(buildMultiYAxisOption(data.longterm.dates, groups));
     }
 
-    // 4. 估值 + 资金面 (PE + 两融 + 波动率,3 指标不同数量级,多 Y 轴)
+    // 4. 估值 + 资金面
     if (data.longterm && charts.fundamental) {
-        const pe  = data.longterm.series[3].data;          // PE
-        const mg  = data.longterm.series[4].data;          // 两融
-        const vol = data.longterm.series[5].data;          // 波动率
+        const pe  = data.longterm.series[3].data;
+        const mg  = data.longterm.series[4].data;
+        const vol = data.longterm.series[5].data;
         const groups = [
             { name: 'PE TTM',         data: pe,  color: '#2a82e5', position: 'left'  },
             { name: '两融余额(万亿)', data: mg,  color: '#2dd4a0', position: 'right' },
@@ -568,21 +775,11 @@ async function loadAndRender() {
 }
 
 function initCharts() {
-    charts.sentiment_1   = echarts.init(document.getElementById('chart-sentiment-1'));
-    charts.sentiment_2   = echarts.init(document.getElementById('chart-sentiment-2'));
-    charts.baotuan_1     = echarts.init(document.getElementById('chart-baotuan-1'));
-    charts.baotuan_2     = echarts.init(document.getElementById('chart-baotuan-2'));
-    charts.longterm      = echarts.init(document.getElementById('chart-longterm'));
-    charts.fundamental   = echarts.init(document.getElementById('chart-fundamental'));
-
-    // 占位空 figure(防止 resize 时空白)
-    Object.values(charts).forEach(c => {
-        c.setOption({
-            backgroundColor: 'transparent',
-            graphic: [{ type: 'text', left: 'center', top: 'middle',
-                style: { text: '加载中...', fill: '#8c95a8', fontSize: 14 } }],
-        });
-    });
+    charts.sentiment   = echarts.init(document.getElementById('chart-sentiment'));
+    charts.baotuan_1   = echarts.init(document.getElementById('chart-baotuan-1'));
+    charts.baotuan_2   = echarts.init(document.getElementById('chart-baotuan-2'));
+    charts.longterm    = echarts.init(document.getElementById('chart-longterm'));
+    charts.fundamental = echarts.init(document.getElementById('chart-fundamental'));
 
     window.addEventListener('resize', () => {
         Object.values(charts).forEach(c => c.resize());
@@ -594,7 +791,6 @@ async function main() {
     await loadAndRender();
     document.getElementById('loader').style.display = 'none';
     document.getElementById('app').style.display = 'block';
-    // 每 5 分钟自动刷新
     setInterval(loadAndRender, 5 * 60 * 1000);
 }
 

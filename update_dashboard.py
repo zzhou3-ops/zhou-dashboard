@@ -33,6 +33,76 @@ DATA_OUT = DASH / "data" / "data.json"
 
 
 # ============================================================
+# 综合情绪指标计算
+# ============================================================
+def normalize_vix(v):
+    """VIX 标准化到 0-100 (原始 0-50 → 0-100)"""
+    if v is None: return None
+    return max(0, min(100, round(v * 2, 1)))
+
+def normalize_pcr(p):
+    """PCR 标准化到 0-100 (原始 0-2 → 0-100)"""
+    if p is None: return None
+    return max(0, min(100, round(p * 50, 1)))
+
+def normalize_margin(b):
+    """两融余额 标准化到 0-100 (历史范围 7000-30000 亿)"""
+    if b is None: return None
+    return max(0, min(100, round((b - 7000) / 23000 * 100, 1)))
+
+def normalize_cnn(c):
+    """CNN 恐惧贪婪已经是 0-100,直接返回"""
+    if c is None: return None
+    return max(0, min(100, round(c, 1)))
+
+def compute_composite_sentiment(dates, vix_data, pcr_data, margin_data, cnn_data):
+    """
+    综合情绪指标 = VIX×25% + PCR×25% + 两融×25% + CNN×25%
+    所有指标先标准化到 0-100,再加权平均
+
+    区域解释:
+    - 0-20 极度冰点 (资产荒,可能机会)
+    - 20-40 恐慌 (情绪谨慎)
+    - 40-60 中性 (正常状态)
+    - 60-80 贪婪 (情绪浓厚)
+    - 80-100 极度贪婪 (泡沫化,警惕)
+    """
+    n = len(dates)
+    composite  = []
+    components = {
+        "vix_norm":    [],
+        "pcr_norm":    [],
+        "margin_norm": [],
+        "cnn_norm":    [],
+    }
+
+    for i in range(n):
+        v = vix_data[i]    if i < len(vix_data)    else None
+        p = pcr_data[i]    if i < len(pcr_data)    else None
+        m = margin_data[i] if i < len(margin_data) else None
+        c = cnn_data[i]    if i < len(cnn_data)    else None
+
+        v_n = normalize_vix(v)
+        p_n = normalize_pcr(p)
+        m_n = normalize_margin(m)
+        c_n = normalize_cnn(c)
+
+        components["vix_norm"].append(v_n)
+        components["pcr_norm"].append(p_n)
+        components["margin_norm"].append(m_n)
+        components["cnn_norm"].append(c_n)
+
+        # 加权平均 (都要有数据才算)
+        if None in (v_n, p_n, m_n, c_n):
+            composite.append(None)
+        else:
+            avg = (v_n + p_n + m_n + c_n) / 4
+            composite.append(round(avg, 1))
+
+    return composite, components
+
+
+# ============================================================
 # CSV 读取
 # ============================================================
 def read_csv(path):
@@ -118,17 +188,39 @@ def build_data():
             keys = list(sentiment_csv.keys())
             for k in keys: sentiment_csv[k] = sentiment_csv[k][-n:]
 
+        # 原始 4 个指标
+        vix_data    = sentiment_csv.get("VIX", [])
+        pcr_data    = sentiment_csv.get("PCR", [])
+        cnn_data    = sentiment_csv.get("CNN_FG", [])
+        margin_data = sentiment_csv.get("两融余额_亿", [])
+        dates       = sentiment_csv.get("date", [])
+
+        # 综合情绪指标
+        composite, components = compute_composite_sentiment(
+            dates, vix_data, pcr_data, margin_data, cnn_data
+        )
+
         out["sentiment"] = {
-            "dates": sentiment_csv.get("date", []),
-            "series": [
-                {"name": "VIX",            "data": sentiment_csv.get("VIX", [])},
-                {"name": "PCR",            "data": sentiment_csv.get("PCR", [])},
-                {"name": "CNN恐惧贪婪",     "data": sentiment_csv.get("CNN_FG", [])},
-                {"name": "两融余额(亿)",    "data": sentiment_csv.get("两融余额_亿", [])},
+            "dates":      dates,
+            "composite":  composite,                                    # 主线:合成值 0-100
+            "components": components,                                    # 4 个标准化后的成分(各占 25%)
+            "raw": {                                                   # 原始数据(给 tooltip)
+                "VIX":      vix_data,
+                "PCR":      pcr_data,
+                "两融余额": margin_data,
+                "CNN_FG":   cnn_data,
+            },
+            "rating":     sentiment_csv.get("CNN评级", []),
+            "weight":     {"VIX": 25, "PCR": 25, "两融余额": 25, "CNN_FG": 25},  # 权重说明
+            "zones": [                                                 # 区域定义
+                {"min": 0,   "max": 20,  "label": "极度冰点", "color": "#374151"},
+                {"min": 20,  "max": 40,  "label": "恐慌",     "color": "#ef4444"},
+                {"min": 40,  "max": 60,  "label": "中性",     "color": "#22c55e"},
+                {"min": 60,  "max": 80,  "label": "贪婪",     "color": "#f59e0b"},
+                {"min": 80,  "max": 100, "label": "极度贪婪", "color": "#ef4444"},
             ],
-            "rating": sentiment_csv.get("CNN评级", []),
         }
-        print(f"  sentiment rows: {n}")
+        print(f"  sentiment rows: {n}, composite last: {composite[-1] if composite else 'N/A'}")
 
     # ---------- 2. 抱团率 ----------
     baotuan_csv = read_csv(WORKSPACE / "周总投资思路之成交额抱团_2016-2026_v3.csv")
