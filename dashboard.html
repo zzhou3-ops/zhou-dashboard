@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>周总投资思路 · 情绪 + 抱团率实时看板</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<style>
+:root {
+    --bg:       #0d1421;
+    --bg-card:  #161e30;
+    --bg-card2: #1c2638;
+    --border:   #2a3447;
+    --text:     #e5eaf2;
+    --muted:    #8c95a8;
+    --accent:   #2a82e5;
+    --green:    #2dd4a0;
+    --orange:   #f59e0b;
+    --red:      #ef4444;
+    --yellow:   #fbbf24;
+    --purple:   #a78bfa;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+    min-height: 100vh;
+    padding: 20px;
+}
+.wrap { max-width: 1480px; margin: 0 auto; }
+
+/* ========== 顶部品牌栏 ========== */
+.topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 22px;
+    background: linear-gradient(135deg, #101A32 0%, #16213e 100%);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+.brand {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+}
+.brand .accent { color: var(--accent); }
+.subtitle {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 2px;
+    letter-spacing: 0.5px;
+}
+.judgment {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    flex-wrap: wrap;
+}
+.j-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    background: var(--bg-card2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    font-size: 13px;
+}
+.j-chip .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--yellow);
+    box-shadow: 0 0 8px currentColor;
+}
+.j-chip[data-level="warm"]   .dot { background: var(--orange); }
+.j-chip[data-level="hot"]    .dot { background: var(--red);    }
+.j-chip[data-level="cold"]   .dot { background: var(--accent); }
+.j-chip[data-level="freeze"] .dot { background: var(--purple); }
+.j-chip .label { color: var(--muted); font-size: 11px; }
+.j-chip .value { font-weight: 600; }
+
+/* ========== 主网格 ========== */
+.grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    margin-bottom: 18px;
+}
+@media (max-width: 880px) { .grid { grid-template-columns: 1fr; } }
+.card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+.card-head {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.card-title {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+.card-title .badge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 1px 7px;
+    background: var(--accent);
+    color: white;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    vertical-align: middle;
+}
+.card-meta {
+    font-size: 11px;
+    color: var(--muted);
+}
+.card-body {
+    flex: 1;
+    min-height: 320px;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.chart { width: 100%; flex: 1; min-height: 150px; }
+.chart-half { width: 100%; flex: 1; min-height: 130px; }
+
+/* ========== 信号面板 ========== */
+.signals {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 22px;
+}
+.signals h3 {
+    font-size: 14px;
+    color: var(--muted);
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.signal-list {
+    list-style: none;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+@media (max-width: 880px) { .signal-list { grid-template-columns: 1fr; } }
+.signal-list li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 12px;
+    background: var(--bg-card2);
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 1.4;
+}
+.signal-list li::before {
+    content: "●";
+    color: var(--green);
+    font-size: 12px;
+    line-height: 1;
+    margin-top: 5px;
+    flex-shrink: 0;
+}
+.signal-list li.warn::before { color: var(--orange); }
+.signal-list li.bad::before  { color: var(--red); }
+
+/* ========== Footer ========== */
+.footer {
+    margin-top: 18px;
+    padding: 14px;
+    text-align: center;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.5px;
+}
+.refresh-dot {
+    display: inline-block;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    margin-right: 4px;
+    animation: pulse 1.6s infinite;
+}
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+.loading {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    flex-direction: column;
+    gap: 14px;
+}
+.loading .spinner {
+    width: 32px; height: 32px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+</style>
+</head>
+<body>
+
+<div class="loading" id="loader">
+    <div class="spinner"></div>
+    <div style="color: var(--muted); font-size: 13px;">正在加载数据...</div>
+</div>
+
+<div class="wrap" id="app" style="display:none">
+
+    <!-- ========== 顶部品牌栏 ========== -->
+    <div class="topbar">
+        <div>
+            <div class="brand">周总投资思路<span class="accent"> · 情绪 + 抱团率看板</span></div>
+            <div class="subtitle">市场情绪周期 · 资金行为 · 估值水位 · 自动每日收盘后刷新</div>
+        </div>
+        <div class="judgment" id="judgment-bar">
+            <span class="j-chip" id="chip-phase" data-level="warm">
+                <span class="dot"></span>
+                <span class="label">情绪周期</span>
+                <span class="value" id="v-phase">--</span>
+            </span>
+            <span class="j-chip">
+                <span class="label">建议仓位</span>
+                <span class="value" id="v-pos">--</span>
+            </span>
+            <span class="j-chip">
+                <span class="label">下次更新</span>
+                <span class="value" id="v-next">--</span>
+            </span>
+            <span class="j-chip">
+                <span class="dot"></span>
+                <span class="label">数据时间</span>
+                <span class="value" id="v-time">--</span>
+            </span>
+        </div>
+    </div>
+
+    <!-- ========== 主网格 4 面板 ========== -->
+    <div class="grid">
+        <!-- 情绪周期 -->
+        <div class="card">
+            <div class="card-head">
+                <div class="card-title">市场情绪周期 <span class="badge">QUAD</span></div>
+                <div class="card-meta">VIX · PCR · 两融 · CNN 恐惧贪婪</div>
+            </div>
+            <div class="card-body">
+                <div id="chart-sentiment-1" class="chart-half"></div>
+                <div id="chart-sentiment-2" class="chart-half"></div>
+            </div>
+        </div>
+
+        <!-- 抱团率 -->
+        <div class="card">
+            <div class="card-head">
+                <div class="card-title">资金抱团率 <span class="badge">2016-2026</span></div>
+                <div class="card-meta">TOP 50 成交占比 · 5日均线 · 总成交额</div>
+            </div>
+            <div class="card-body">
+                <div id="chart-baotuan-1" class="chart-half"></div>
+                <div id="chart-baotuan-2" class="chart-half"></div>
+            </div>
+        </div>
+
+        <!-- 长周期 三大指数 -->
+        <div class="card">
+            <div class="card-head">
+                <div class="card-title">长周期三大指数 <span class="badge">2019-</span></div>
+                <div class="card-meta">创业板 · 沪深 300 · 上证指数</div>
+            </div>
+            <div class="card-body">
+                <div id="chart-longterm" class="chart"></div>
+            </div>
+        </div>
+
+        <!-- 估值 + 资金面 -->
+        <div class="card">
+            <div class="card-head">
+                <div class="card-title">估值 + 资金面 <span class="badge">PE · 两融 · 波动率</span></div>
+                <div class="card-meta">上证 PE · 两融余额(万亿) · 20日波动率</div>
+            </div>
+            <div class="card-body">
+                <div id="chart-fundamental" class="chart"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== 信号面板 ========== -->
+    <div class="signals">
+        <h3>📌 关键信号 / 操作建议</h3>
+        <ul class="signal-list" id="signal-list"></ul>
+        <div id="advice" style="margin-top: 14px; padding: 12px 16px; background: rgba(42,130,229,0.1); border-left: 3px solid var(--accent); border-radius: 6px; font-size: 14px;"></div>
+    </div>
+
+    <!-- ========== Footer ========== -->
+    <div class="footer">
+        <span class="refresh-dot"></span>
+        数据每 5 分钟自动刷新 · 最近一次刷新: <span id="last-fetch">--</span>
+        <br>
+        非投资建议 · 数据来源:akshare / 公开行情数据 · 仅供方法论验证
+    </div>
+</div>
+
+<script>
+// ===================== ECharts 通用配置 =====================
+const BASE_TEXT_STYLE = { color: '#e5eaf2', fontFamily: 'PingFang SC, Microsoft YaHei' };
+const TOOLTIP_BASE = {
+    backgroundColor: 'rgba(20, 28, 45, 0.95)',
+    borderColor: '#2a3447',
+    textStyle: { color: '#e5eaf2', fontSize: 12 },
+    axisPointer: { type: 'cross', lineStyle: { color: '#8c95a8', type: 'dashed' } },
+};
+function gridOpt() {
+    return { left: 50, right: 60, top: 50, bottom: 60 };
+}
+function axisCommon(name) {
+    return {
+        type: 'value',
+        name: name || '',
+        nameTextStyle: { color: '#8c95a8', fontSize: 11 },
+        axisLine: { lineStyle: { color: '#2a3447' } },
+        axisLabel: { color: '#8c95a8', fontSize: 10 },
+        splitLine: { lineStyle: { color: '#1f2937', type: 'dashed' } },
+    };
+}
+function timeAxis() {
+    return {
+        type: 'time',
+        axisLine: { lineStyle: { color: '#2a3447' } },
+        axisLabel: { color: '#8c95a8', fontSize: 10 },
+        splitLine: { lineStyle: { color: '#1f2937', type: 'dashed' } },
+    };
+}
+const COLORS = ['#2a82e5', '#2dd4a0', '#f59e0b', '#ef4444', '#a78bfa', '#fbbf24', '#06b6d4', '#ec4899'];
+function getColor(i) { return COLORS[i % COLORS.length]; }
+function buildSeries(defList, dates) {
+    return defList.map((s, i) => ({
+        name: s.name,
+        type: 'line',
+        data: dates.map((d, j) => [d, s.data[j]]),
+        smooth: false,
+        symbol: 'none',
+        showSymbol: false,
+        lineStyle: { color: getColor(i), width: 1.6 },
+        itemStyle: { color: getColor(i) },
+        emphasis: { focus: 'series', lineStyle: { width: 2.4 } },
+    }));
+}
+
+function buildChartOption(dates, seriesDef, opts) {
+    opts = opts || {};
+    const seriesRaw = buildSeries(seriesDef, dates);
+    const legendData = seriesDef.map(s => s.name);
+    return {
+        backgroundColor: 'transparent',
+        tooltip: Object.assign({
+            trigger: 'axis',
+            formatter: function(params) {
+                const date = new Date(params[0].value[0]).toLocaleDateString('zh-CN', {year:'numeric', month:'2-digit', day:'2-digit'}).replace(/\//g, '-');
+                let html = `<div style="font-weight:600">${date}</div>`;
+                params.forEach(p => {
+                    const v = p.value[1];
+                    const formatted = (v === null || v === undefined) ? '—' :
+                        (typeof v === 'number' ? v.toFixed(2) : v);
+                    html += `<div><span style="display:inline-block;width:8px;height:8px;background:${p.color};border-radius:50%;margin-right:6px"></span>${p.seriesName}: <b>${formatted}</b></div>`;
+                });
+                return html;
+            },
+        }, TOOLTIP_BASE),
+        legend: { data: legendData, textStyle: BASE_TEXT_STYLE, top: 8, left: 10 },
+        grid: gridOpt(),
+        xAxis: timeAxis(),
+        yAxis: opts.yAxis || axisCommon(),
+        dataZoom: [
+            { type: 'inside', start: opts.start || 60, end: 100 },
+            { type: 'slider', start: opts.start || 60, end: 100, height: 22, bottom: 8,
+              textStyle: { color: '#8c95a8' }, dataBackground: { lineStyle: {color: '#2a3447'}, areaStyle: {color: '#1c2638'} },
+              fillerColor: 'rgba(42, 130, 229, 0.2)', borderColor: '#2a3447',
+              handleStyle: { color: '#2a82e5' } },
+        ],
+        series: seriesRaw,
+    };
+}
+
+function buildMultiYAxisOption(dates, seriesGroups) {
+    // seriesGroups: [{name, data, color, yAxisName, position}]
+    const series = [];
+    const yAxes = [];
+    let leftCount = 0, rightCount = 0;
+
+    seriesGroups.forEach((g, i) => {
+        const position = g.position || (i % 2 === 0 ? 'left' : 'right');
+        const color = g.color || getColor(i);
+        series.push({
+            name: g.name, type: 'line',
+            data: dates.map((d, j) => [d, g.data[j]]),
+            symbol: 'none', showSymbol: false,
+            smooth: false,
+            lineStyle: { color, width: 1.6 },
+            itemStyle: { color },
+            yAxisIndex: position === 'left' ? 0 : 1,
+            emphasis: { focus: 'series', lineStyle: { width: 2.4 } },
+        });
+        if (position === 'left') leftCount++; else rightCount++;
+    });
+
+    yAxes.push(Object.assign(axisCommon(), { position: 'left' }));
+    yAxes.push(Object.assign(axisCommon(), { position: 'right' }));
+
+    return {
+        backgroundColor: 'transparent',
+        tooltip: Object.assign({
+            trigger: 'axis', confine: true,
+        }, TOOLTIP_BASE),
+        legend: { data: seriesGroups.map(g => g.name), textStyle: BASE_TEXT_STYLE, top: 8 },
+        grid: { left: 60, right: 80, top: 50, bottom: 60 },
+        xAxis: timeAxis(),
+        yAxis: yAxes,
+        dataZoom: [
+            { type: 'inside', start: 60, end: 100 },
+            { type: 'slider', start: 60, end: 100, height: 22, bottom: 8,
+              textStyle: { color: '#8c95a8' },
+              fillerColor: 'rgba(42, 130, 229, 0.2)', borderColor: '#2a3447' },
+        ],
+        series: series,
+    };
+}
+
+// ===================== 主流程 =====================
+const charts = {};
+
+function renderJudgment(d) {
+    const phaseMap = {
+        '冰点期':     { level: 'freeze', label: '冰点期', pos: '0%'    },
+        '修复期':     { level: 'cold',   label: '修复期', pos: '20-30%' },
+        '发酵期':     { level: 'warm',   label: '发酵期', pos: '50-70%' },
+        '高潮期':     { level: 'hot',    label: '高潮期', pos: '70-80%' },
+        '退潮期':     { level: 'warm',   label: '退潮期', pos: '20%'   },
+        '冰点后修复期': { level: 'cold', label: '修复期', pos: '25-30%' },
+    };
+    const info = phaseMap[d.cycle_phase] || phaseMap[d.cycle_phase_short] || { level: 'warm', label: d.cycle_phase };
+    const chip = document.getElementById('chip-phase');
+    chip.setAttribute('data-level', info.level);
+    document.getElementById('v-phase').textContent = info.label;
+    document.getElementById('v-pos').textContent = info.pos + (d.position_pct ? ` (${d.position_pct}%)` : '');
+    document.getElementById('v-next').textContent = d.next_check || '--';
+    document.getElementById('v-time').textContent = (d.update_time || '').slice(5, 16);
+
+    const ul = document.getElementById('signal-list');
+    ul.innerHTML = '';
+    (d.key_signals || []).forEach(s => {
+        const li = document.createElement('li');
+        let cls = '';
+        if (s.includes('大冰点') || s.includes('负') || s.includes('流出')) cls = 'bad';
+        else if (s.includes('涨停') || s.includes('正面') || s.includes('上扬')) cls = '';
+        else cls = 'warn';
+        li.className = cls;
+        li.textContent = s;
+        ul.appendChild(li);
+    });
+    document.getElementById('advice').textContent = '📐 策略: ' + (d.advice || '');
+}
+
+async function fetchData() {
+    try {
+        const r = await fetch('data/data.json?t=' + Date.now());
+        if (!r.ok) throw new Error('fetch fail ' + r.status);
+        return await r.json();
+    } catch (e) {
+        console.error('data fetch error', e);
+        return null;
+    }
+}
+
+async function loadAndRender() {
+    const data = await fetchData();
+    if (!data) {
+        setTimeout(loadAndRender, 10000);
+        return;
+    }
+    document.getElementById('last-fetch').textContent = new Date().toLocaleString('zh-CN');
+
+    // 1. 情绪周期 - 上下分图:VIX+PCR / CNN F&G+两融
+    if (data.sentiment) {
+        const dates = data.sentiment.dates;
+        const sentSeries = data.sentiment.series;
+        charts.sentiment_1.setOption(buildChartOption(
+            dates,
+            [sentSeries[0], sentSeries[1]], // VIX, PCR
+            {start: 60, yAxis: { ...axisCommon(), min: 0, max: 50 }}
+        ));
+        charts.sentiment_2.setOption(buildChartOption(
+            dates,
+            [sentSeries[2], sentSeries[3]], // CNN F&G, 两融
+            {start: 60, yAxis: { ...axisCommon(), min: 0 }}
+        ));
+    }
+
+    // 2. 抱团率 - 上:抱团率+5日均线 / 下:总成交额+参与股票数
+    if (data.baotuan) {
+        const dates = data.baotuan.dates;
+        const series = data.baotuan.series;
+        charts.baotuan_1.setOption(buildChartOption(
+            dates,
+            [series[0], series[1]], // 抱团率, 5日均线
+            {start: 60, yAxis: { ...axisCommon(), min: 0, max: 100 }}
+        ));
+        charts.baotuan_2.setOption(buildChartOption(
+            dates,
+            [series[2], series[3]], // 总成交额, 股票数
+            {start: 60, yAxis: axisCommon()}
+        ));
+    }
+
+    // 3. 长周期 三大指数
+    if (data.longterm && charts.longterm) {
+        const groups = data.longterm.series.map((s, i) => ({
+            name: s.name, data: s.data,
+            color: getColor(i),
+            position: 'left',
+        }));
+        charts.longterm.setOption(buildMultiYAxisOption(data.longterm.dates, groups));
+    }
+
+    // 4. 估值 + 资金面 (PE + 两融 + 波动率,3 指标不同数量级,多 Y 轴)
+    if (data.longterm && charts.fundamental) {
+        const pe  = data.longterm.series[3].data;          // PE
+        const mg  = data.longterm.series[4].data;          // 两融
+        const vol = data.longterm.series[5].data;          // 波动率
+        const groups = [
+            { name: 'PE TTM',         data: pe,  color: '#2a82e5', position: 'left'  },
+            { name: '两融余额(万亿)', data: mg,  color: '#2dd4a0', position: 'right' },
+            { name: '20日波动率(%)',  data: vol, color: '#f59e0b', position: 'right' },
+        ];
+        charts.fundamental.setOption(buildMultiYAxisOption(data.longterm.dates, groups));
+    }
+
+    // 5. judgment
+    if (data.judgment) renderJudgment(data.judgment);
+}
+
+function initCharts() {
+    charts.sentiment_1   = echarts.init(document.getElementById('chart-sentiment-1'));
+    charts.sentiment_2   = echarts.init(document.getElementById('chart-sentiment-2'));
+    charts.baotuan_1     = echarts.init(document.getElementById('chart-baotuan-1'));
+    charts.baotuan_2     = echarts.init(document.getElementById('chart-baotuan-2'));
+    charts.longterm      = echarts.init(document.getElementById('chart-longterm'));
+    charts.fundamental   = echarts.init(document.getElementById('chart-fundamental'));
+
+    // 占位空 figure(防止 resize 时空白)
+    Object.values(charts).forEach(c => {
+        c.setOption({
+            backgroundColor: 'transparent',
+            graphic: [{ type: 'text', left: 'center', top: 'middle',
+                style: { text: '加载中...', fill: '#8c95a8', fontSize: 14 } }],
+        });
+    });
+
+    window.addEventListener('resize', () => {
+        Object.values(charts).forEach(c => c.resize());
+    });
+}
+
+async function main() {
+    initCharts();
+    await loadAndRender();
+    document.getElementById('loader').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    // 每 5 分钟自动刷新
+    setInterval(loadAndRender, 5 * 60 * 1000);
+}
+
+document.addEventListener('DOMContentLoaded', main);
+</script>
+</body>
+</html>
